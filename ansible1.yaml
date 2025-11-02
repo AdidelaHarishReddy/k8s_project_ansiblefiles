@@ -1,0 +1,239 @@
+---
+- name: Add Git repo to ArgoCD and create application
+  hosts: argo_servers
+  become: true
+  gather_facts: yes
+
+  vars:
+    argocd_server: "argocd.example.com"  # Replace with actual ArgoCD server
+    argocd_username: "admin"
+    argocd_password: "your-password"     # Store this securely (e.g., in Ansible Vault)
+    git_repo_url: "https://github.com/AdidelaHarishReddy/project_k8s_yaml.git"
+    git_repo_name: "my_project_yaml_repo"
+    app_name: "my-app"
+    app_namespace: "project"
+    app_path: "./"
+    kube_dest_server: "https://kubernetes.default.svc"
+    aws_access_key: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') | default('') }}"
+    aws_secret_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') | default('') }}"
+
+  tasks:
+
+    - name: Install ArgoCD CLI
+      ansible.builtin.shell: |
+        curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+        chmod +x /usr/local/bin/argocd
+      args:
+        creates: /usr/local/bin/argocd  # Don't re-download if already installed
+
+
+    - name: getting the host name
+      ansible.builtin.shell: |
+        curl -s "https://checkip.amazonaws.com"
+      register: hostname_master
+
+    - name: getting the argocd nodeport
+      ansible.builtin.shell: |
+        kubectl get svc -n argocd | awk '{print $5}' | tail -2 | head -1 | grep -o '443:[0-9]*' | cut -d ':' -f2
+        # kubectl get svc argocd-server -n argocd -o jsonpath='{.spec.ports[?(@.port==443)].nodePort}' 
+      register: nodeport
+      environment:
+         KUBECONFIG: /home/ubuntu/.kube/config
+
+    - name: Debug nodeport
+      ansible.builtin.debug:
+        msg: "NodePort: {{ nodeport.stdout }}"
+      ignore_errors: yes
+
+    - name: Debug nodeport
+      ansible.builtin.debug:
+        var: nodePort
+      ignore_errors: yes
+
+    - name: getting argocd password
+      ansible.builtin.shell: |
+        kubectl get secrets -n argocd argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d | xargs -I{} echo "{}"
+      register: password_raw
+      environment:
+         KUBECONFIG: /home/ubuntu/.kube/config
+
+    - name: Debug password
+      ansible.builtin.debug:
+        msg: "password: {{ password_raw.stdout }}"
+      ignore_errors: yes
+
+    - name: Set nodePort fact
+      set_fact:
+        nodePort: "{{ nodeport.stdout | trim }}"
+
+    - name: Wait until ArgoCD is reachable
+      wait_for:
+        host: "{{ hostname_master.stdout | trim }}"
+        port: "{{ nodePort | int }}"
+        timeout: 60
+
+    - name: Login to ArgoCD
+      ansible.builtin.shell: |
+        argocd login "{{ hostname_master.stdout | trim }}:{{ nodeport.stdout | trim }}" --username {{ argocd_username }} --password {{ password_raw.stdout }} --insecure
+      environment:
+        ARGOCD_INSECURE: "true"  # Optional: avoid cert checks (not recommended for prod)
+
+    - name: Add Git repository to ArgoCD
+      ansible.builtin.shell: |
+        argocd repo add {{ git_repo_url }} --name {{ git_repo_name }}
+      register: repo_add_result
+      failed_when: "'already exists' not in repo_add_result.stderr and repo_add_result.rc != 0"
+
+    - name: Create Kubernetes namespace
+      ansible.builtin.shell: |
+        kubectl create namespace {{ app_namespace }}
+      register: ns_result
+      failed_when: "'already exists' not in ns_result.stderr and ns_result.rc != 0"
+      environment:
+         KUBECONFIG: /home/ubuntu/.kube/config
+
+
+    - name: Create ArgoCD Application
+      ansible.builtin.shell: |
+        argocd app create {{ app_name }} \
+          --repo {{ git_repo_url }} \
+          --path {{ app_path }} \
+          --dest-server {{ kube_dest_server }} \
+          --dest-namespace {{ app_namespace }} \
+          --project default \
+          --sync-policy automated \
+          --auto-prune \
+          --self-heal
+      register: app_create_result
+      failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"
+
+    - name: Sync ArgoCD Application (optional)
+      ansible.builtin.shell: |
+        argocd app sync {{ app_name }} --force
+      register: sync_result
+      until: sync_result.rc == 0
+      retries: 5
+      delay: 10
+
+    - name: creating aws key_id& access_key
+      ansible.builtin.shell: |
+          kubectl create secret generic aws-secret --namespace kube-system --from-literal key_id= {{ aws_access_key }} --from-literal access_key= {{ aws_secret_key }} 
+      environment:
+         KUBECONFIG: /home/ubuntu/.kube/config
+      register: aws_credentials      
+      failed_when: "'already exist' not in aws_credentials.stderr and app_create_result.rc != 0"     
+    
+    - name: installing aws_csi
+      ansible.builtin.shell: |
+          kubectl apply -k "github.com/kubernetes-sigs/aws-ebs-csi-driver/deploy/kubernetes/overlays/stable/?ref=release-1.45"
+      environment:
+         KUBECONFIG: /home/ubuntu/.kube/config
+
+    - name: installing helm
+      ansible.builtin.shell: |
+          curl -s https://raw.githubusercontent.com/AdidelaHarishReddy/installations/refs/heads/main/HELM-ubuntu | bash         
+      environment:
+         KUBECONFIG: /home/ubuntu/.kube/config
+      delay: 5     
+       
+    - name: adding promethius repo
+      ansible.builtin.shell: |
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo update
+      environment:
+        KUBECONFIG: /home/ubuntu/.kube/config
+        HOME: /home/ubuntu
+      become: false
+           # failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"
+
+    - name: creating the new namespace for monitoring
+      ansible.builtin.shell: |
+          kubectl create ns monitoring
+      environment:
+         KUBECONFIG: /home/ubuntu/.kube/config
+      failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"      
+
+    - name: Create custom values file for kube-prometheus-stack
+      become: false
+      ansible.builtin.copy:
+        dest: ./custom_kube_prometheus_stack.yml
+        content: |
+          alertmanager:
+            enabled: true
+            alertmanagerSpec:
+              # Selects Alertmanager configuration based on these labels.
+              alertmanagerConfigSelector:
+                matchLabels:
+                  release: monitoring
+              replicas: 2
+              alertmanagerConfigMatcherStrategy:
+                type: None    
+    - name: installing prometheus-communinty charts
+      ansible.builtin.shell: |         
+        helm install monitoring prometheus-community/kube-prometheus-stack -n monitoring -f ./custom_kube_prometheus_stack.yml
+        sleep 10
+      environment:
+        KUBECONFIG: /home/ubuntu/.kube/config
+      become: false     
+      failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"     
+          
+    - name: installing INGRESS NGINX CONTROLLER charts
+      ansible.builtin.shell: |
+          helm install my-release oci://ghcr.io/nginx/charts/nginx-ingress \
+            --version 2.3.1 \
+            --namespace ingress-nginx \
+            --create-namespace \
+            --set controller.kind=daemonset \
+            --set controller.service.type=NodePort \
+            --set controller.hostPort.enabled=true
+          sleep 2
+      environment:
+          KUBECONFIG: /home/ubuntu/.kube/config
+      become: false
+      failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"      
+
+    - name: Copy ingress file from local to remote
+      become: false
+      ansible.builtin.copy:
+        src: /home/ubuntu/ansible/monitoring_ingress.yaml         # Relative to playbook or absolute path
+        dest: /home/ubuntu/
+        owner: ubuntu
+        group: ubuntu
+        mode: '0777'
+
+    - name: installing INGRESS NGINX CONTROLLER charts
+      ansible.builtin.shell: | 
+        kubectl apply -f monitoring_ingress.yaml -n monitoring
+      environment:
+          KUBECONFIG: /home/ubuntu/.kube/config
+      become: false
+      failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"  
+
+    - name: Deploy Nginx only on data servers
+      ansible.builtin.include_role:
+        name: nginx
+      when: "'data_servers' in group_names"
+      vars:
+        aws_access_key: "{{ aws_access_key }}"
+        aws_secret_key: "{{ aws_secret_key }}"  
+
+    - name: Include nginx role only on web servers
+      ansible.builtin.include_role:
+        name: nginx
+
+
+          # - name: promethius GUI port forwarding to 9090
+          # ansible.builtin.shell: |
+          # nohup kubectl port-forward service/prometheus-operated -n monitoring 9090:9090 --address 0.0.0.0 &
+          # environment:
+          # KUBECONFIG: /home/ubuntu/.kube/config   
+          # - name: Grafana UI port forwarding to 8080
+          # ansible.builtin.shell: |
+          # nohup kubectl port-forward service/monitoring-grafana -n monitoring 8080:80 --address 0.0.0.0 &
+          # environment:
+          # KUBECONFIG: /home/ubuntu/.kube/config  
+          #  - name: Alertmanager UI port forwarding to 9093
+          # ansible.builtin.shell: |
+          # nohup kubectl port-forward service/alertmanager-operated -n monitoring 9093:9093 --address 0.0.0.0 &
+          # environment:
+          # KUBECONFIG: /home/ubuntu/.kube/config  

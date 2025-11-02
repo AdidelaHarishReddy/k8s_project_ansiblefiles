@@ -1,0 +1,30 @@
+# k8s/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-ingress
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing           # or "internal"
+    alb.ingress.kubernetes.io/target-type: ip                   # allows ClusterIP services
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+    alb.ingress.kubernetes.io/load-balancer-name: my-app-alb     # optional friendly name
+    alb.ingress.kubernetes.io/group.name: my-app                 # optional grouping
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /frontend
+            pathType: Prefix
+            backend:
+              service:
+                name: front-clusterip
+                port:
+                  number: 3000
+          - path: /backend
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-clusterip
+                port:
+                  number: 8000

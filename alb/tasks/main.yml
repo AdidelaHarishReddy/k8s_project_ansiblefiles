@@ -1,0 +1,44 @@
+---
+# tasks file for alb
+    - name: adding aws eks-charts 
+      ansible.builtin.shell: | 
+        helm repo add eks https://aws.github.io/eks-charts
+        helm repo update
+      environment:
+          KUBECONFIG: /home/ubuntu/.kube/config
+      become: false
+      register: app_create_result
+      failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0" 
+
+    - name: 
+      ansible.builtin.shell: | 
+        helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+        -n kube-system \
+        --set clusterName=my_cluster \
+        --set region=ap-south-1 \
+        --set vpcId=vpc-0700db45c2075c072
+      environment:
+          KUBECONFIG: /home/ubuntu/.kube/config
+      become: false
+          register: app_create_result
+      failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0" 
+
+    - name:
+      ansible.builtin.copy: |
+         src: ingress.yaml           # file inside the role's "files" folder
+         dest: /tmp/ingress.yaml     # destination path on the target host
+         owner: ubuntu                 # optional
+         group: ubuntu               # optional
+         mode: '0777'                # optional, file permissions
+      environment:
+          HOME: /home/ubuntu
+
+    - name: running ingress in project namespace
+      ansible.builtin.shell: |
+        kubectl apply -f ingress.yaml -n project
+      environment:
+          KUBECONFIG: /home/ubuntu/.kube/config
+      become: false
+      register: app_create_result
+      failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"
+

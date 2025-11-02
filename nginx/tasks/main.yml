@@ -1,0 +1,116 @@
+---
+# tasks file for nginx
+    - name: downloding the aws_loadbalancer_json_polocy
+      ansible.builtin.shell: | 
+        curl -o iam-policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
+      environment:
+          HOME: /home/ubuntu
+      become: false
+      failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"
+
+ 
+    - name: installing aws cli
+      ansible.builtin.shell: |
+        curl -s https://raw.githubusercontent.com/AdidelaHarishReddy/installations/refs/heads/main/install_aws_cli | bash
+      environment:
+          HOME: /home/ubuntu
+      become: false
+      failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"
+
+
+    - name: aws credentials configure
+      ansible.builtin.shell: |
+        aws configure set aws_access_key_id "{{ aws_access_key }}"
+        aws configure set aws_secret_access_key "{{ aws_secret_key }}"
+        aws configure set default.region ap-south-1
+        aws configure set output json
+      environment:
+          HOME: /home/ubuntu
+      become: false
+      failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"
+
+
+    - name: creating the polocy for aws_alb from iam_polocy.json
+      ansible.builtin.shell: | 
+        aws iam create-policy \
+          --policy-name AWSLoadBalancerControllerIAMPolicy \
+          --policy-document file://iam-policy.json
+      environment:
+          HOME: /home/ubuntu
+      become: false
+      failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"
+
+    - name: Create an IAM Role for EC2
+      ansible.builtin.shell: |
+        aws iam create-role \
+          --role-name EC2NodeRoleForALB \
+          --assume-role-policy-document '{
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Principal": { "Service": "ec2.amazonaws.com" },
+                "Action": "sts:AssumeRole"
+              }
+            ]
+          }'
+      environment:
+          HOME: /home/ubuntu
+      become: false
+      failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0" 
+
+    - name: create an instance profile
+      ansible.builtin.shell: |
+         aws iam create-instance-profile --instance-profile-name EC2NodeRoleForALB
+      environment:
+          HOME: /home/ubuntu
+      become: false
+      failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"
+
+    - name: attach an instance profile 
+      ansible.builtin.shell: |
+        aws iam add-role-to-instance-profile \
+          --instance-profile-name EC2NodeRoleForALB \
+          --role-name EC2NodeRoleForALB
+      environment:
+          HOME: /home/ubuntu
+      become: false
+      failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"
+
+    - name: Attach the ALB Policy to the Role
+      ansible.builtin.shell: |
+        aws iam attach-role-policy \
+          --role-name EC2NodeRoleForALB \
+          --policy-arn arn:aws:iam::546771244881:policy/AWSLoadBalancerControllerIAMPolicy
+      environment:
+          HOME: /home/ubuntu
+      become: false
+      failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"
+
+      ansible.builtin.shell: |
+
+
+    - name: Find EC2 worker instance IDs
+      ansible.builtin.command: >
+        aws ec2 describe-instances
+        --region {{ aws_region }}
+        --filters "Name=tag:Name,Values={{ tag_filter }}"
+        --query "Reservations[*].Instances[*].InstanceId"
+        --output text
+      register: ec2_instances
+      changed_when: false
+
+    - name: Debug - Show discovered instance IDs
+      ansible.builtin.debug:
+        msg: "Found instances: {{ ec2_instances.stdout_lines }}"
+
+    - name: Attach IAM Instance Profile to each EC2 instance
+      ansible.builtin.command: >
+        aws ec2 associate-iam-instance-profile
+        --instance-id {{ item }}
+        --iam-instance-profile Name={{ iam_profile_name }}
+        --region {{ aws_region }}
+      loop: "{{ ec2_instances.stdout_lines }}"
+      register: attach_results
+      changed_when: "'InvalidInstanceID' not in attach_results.stderr"
+      failed_when: false
