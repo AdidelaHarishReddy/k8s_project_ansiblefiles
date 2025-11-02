@@ -87,9 +87,6 @@
       become: false
       failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"
 
-      ansible.builtin.shell: |
-
-
     - name: Find EC2 worker instance IDs
       ansible.builtin.command: >
         aws ec2 describe-instances
@@ -97,6 +94,9 @@
         --filters "Name=tag:Name,Values={{ tag_filter }}"
         --query "Reservations[*].Instances[*].InstanceId"
         --output text
+      environment:
+          HOME: /home/ubuntu
+      become: false
       register: ec2_instances
       changed_when: false
 
@@ -110,6 +110,9 @@
         --instance-id {{ item }}
         --iam-instance-profile Name={{ iam_profile_name }}
         --region {{ aws_region }}
+      environment:
+          HOME: /home/ubuntu
+      become: false
       loop: "{{ ec2_instances.stdout_lines }}"
       register: attach_results
       changed_when: "'InvalidInstanceID' not in attach_results.stderr"
