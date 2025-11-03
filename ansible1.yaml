@@ -6,6 +6,7 @@
 
   vars:
     argocd_server: "argocd.example.com"  # Replace with actual ArgoCD server
+    playbook_dir: "/mnt/c/Users/anand/OneDrive/Desktop/project/ansible_project/k8s_project_ansiblefiles"
     argocd_username: "admin"
     argocd_password: "your-password"     # Store this securely (e.g., in Ansible Vault)
     git_repo_url: "https://github.com/AdidelaHarishReddy/project_k8s_yaml.git"
@@ -195,7 +196,7 @@
     - name: Copy ingress file from local to remote
       become: false
       ansible.builtin.copy:
-        src: /home/ubuntu/ansible/monitoring_ingress.yaml         # Relative to playbook or absolute path
+        src: "{{ playbook_dir }}/monitoring_ingress.yaml"         # Relative to playbook directory on controller
         dest: /home/ubuntu/
         owner: ubuntu
         group: ubuntu
