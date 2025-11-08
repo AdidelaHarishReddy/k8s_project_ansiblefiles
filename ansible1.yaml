@@ -210,17 +210,20 @@
       become: false
       failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"  
 
-    - name: Deploy Nginx only on data servers
-      ansible.builtin.include_role:
-        name: nginx
-      run_once: true
-      delegate_to: "{{ item }}"
-      loop: "{{ groups['data_servers'] }}"
-      vars:
-        aws_access_key: "{{ aws_access_key }}"
-        aws_secret_key: "{{ aws_secret_key }}"  
+    - name: creating the ALB controller installation
+      block:
+        - name: installing the aws-load-balancer-controller
+          ansible.builtin.include_role:
+            name: alb
+          vars:
+            aws_access_key: "{{ aws_access_key }}"
+            aws_secret_key: "{{ aws_secret_key }}"
+        - name: creating the ALB as well as ingress resource
+          ansible.builtin.include_role:
+            name: alb
+          register: alb_result
 
-    - name: Include nginx role only on web servers
+    - name: creating the ALB as well as ingress resource
       ansible.builtin.include_role:
         name: alb
       register: alb_result
