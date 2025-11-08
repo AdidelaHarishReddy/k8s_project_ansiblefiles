@@ -213,7 +213,9 @@
     - name: Deploy Nginx only on data servers
       ansible.builtin.include_role:
         name: nginx
-      when: "'data_servers' in group_names"
+      run_once: true
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['data_servers'] }}"
       vars:
         aws_access_key: "{{ aws_access_key }}"
         aws_secret_key: "{{ aws_secret_key }}"  
@@ -221,7 +223,7 @@
     - name: Include nginx role only on web servers
       ansible.builtin.include_role:
         name: alb
-
+      register: alb_result
 
           # - name: promethius GUI port forwarding to 9090
           # ansible.builtin.shell: |
