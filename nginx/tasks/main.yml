@@ -86,16 +86,29 @@
           HOME: /home/ubuntu
       become: false
       failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"
+    
+    - name: Validate AWS credentials
+      command: aws sts get-caller-identity
+      environment:
+         AWS_ACCESS_KEY_ID: "{{ aws_access_key | trim }}"
+         AWS_SECRET_ACCESS_KEY: "{{ aws_secret_key | trim }}"
+         AWS_DEFAULT_REGION: "{{ aws_region | trim }}"
+      register: aws_identity
+      changed_when: false
+      failed_when: "'InvalidClientTokenId' in aws_identity.stderr"
 
     - name: Find EC2 worker instance IDs
       ansible.builtin.command: >
         aws ec2 describe-instances
         --region {{ aws_region }}
-        --filters "Name=tag:Name,Values={{ tag_filter }}"
-        --query "Reservations[*].Instances[*].InstanceId"
+        --filters 'Name=tag:Name,Values={{ tag_filter }}'
+        --query 'Reservations[*].Instances[*].InstanceId'
         --output text
       environment:
           HOME: /home/ubuntu
+          AWS_ACCESS_KEY_ID: "{{ aws_access_key | trim }}"
+          AWS_SECRET_ACCESS_KEY: "{{ aws_secret_key | trim }}"
+          AWS_DEFAULT_REGION: "{{ aws_region | trim }}"
       become: false
       register: ec2_instances
       changed_when: false
@@ -112,6 +125,9 @@
         --region {{ aws_region }}
       environment:
           HOME: /home/ubuntu
+          AWS_ACCESS_KEY_ID: "{{ aws_access_key | trim }}"
+          AWS_SECRET_ACCESS_KEY: "{{ aws_secret_key | trim }}"
+          AWS_DEFAULT_REGION: "{{ aws_region | trim }}"
       become: false
       loop: "{{ ec2_instances.stdout_lines }}"
       register: attach_results

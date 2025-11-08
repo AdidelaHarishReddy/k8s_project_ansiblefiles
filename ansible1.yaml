@@ -220,7 +220,7 @@
 
     - name: Include nginx role only on web servers
       ansible.builtin.include_role:
-        name: nginx
+        name: alb
 
 
           # - name: promethius GUI port forwarding to 9090
