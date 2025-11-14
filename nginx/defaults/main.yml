@@ -2,4 +2,7 @@
 # defaults file for nginx
 iam_profile_name: "EC2NodeRoleForALB"
 tag_filter: "*worker*"
+aws_access_key: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
+aws_secret_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
 aws_region: "ap-south-1"
+

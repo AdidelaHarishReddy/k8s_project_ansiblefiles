@@ -9,14 +9,14 @@
   register: download_result
   failed_when: download_result.rc != 0
 
-- name: installing aws cli
-  ansible.builtin.shell: |
-    curl -s https://raw.githubusercontent.com/AdidelaHarishReddy/installations/refs/heads/main/install_aws_cli | bash
-  environment:
-    HOME: /home/ubuntu
-  become: false
-  register: install_result
-  failed_when: install_result.rc != 0
+    #- name: installing aws cli
+    #ansible.builtin.shell: |
+    #curl -s https://raw.githubusercontent.com/AdidelaHarishReddy/installations/refs/heads/main/install_aws_cli | bash
+    #environment:
+    #HOME: /home/ubuntu
+    #become: false
+    #register: install_result
+    #failed_when: install_result.rc != 0
 
 - name: aws credentials configure
   ansible.builtin.shell: |
