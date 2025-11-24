@@ -226,159 +226,160 @@
 
 #   tasks:
 
-    - name: downloding the aws_loadbalancer_json_polocy
-      ansible.builtin.shell: |
-         curl -o iam-policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
-      environment:
-        HOME: /home/ubuntu
-      become: false
-      register: download_result
-      failed_when: download_result.rc != 0
+#     - name: downloding the aws_loadbalancer_json_polocy
+#       ansible.builtin.shell: |
+#          curl -o iam-policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
+#       environment:
+#         HOME: /home/ubuntu
+#       become: false
+#       register: download_result
+#       failed_when: download_result.rc != 0
 
-    - name: installing aws cli
-      ansible.builtin.shell: |
-        curl -s https://raw.githubusercontent.com/AdidelaHarishReddy/installations/refs/heads/main/install_aws_cli | bash
-      environment:
-        HOME: /home/ubuntu
-        DEBIAN_FRONTEND: noninteractive  # Suppresses apt/dpkg prompts globally
-      args:
-        creates: /usr/local/bin/aws    
-      become: false
-      register: install_result
-      failed_when: install_result.rc != 0 
-    - name: aws credentials configure
-      ansible.builtin.shell: |
-          aws configure set aws_access_key_id "{{ aws_access_key }}"
-          aws configure set aws_secret_access_key "{{ aws_secret_key }}"
-          aws configure set default.region ap-south-1
-          aws configure set output json
-      environment:
-        HOME: /home/ubuntu
-      become: false
-      register: config_result
-      failed_when: config_result.rc != 0
+#     - name: installing aws cli
+#       ansible.builtin.shell: |
+#         curl -s https://raw.githubusercontent.com/AdidelaHarishReddy/installations/refs/heads/main/install_aws_cli | bash
+#       environment:
+#         HOME: /home/ubuntu
+#         DEBIAN_FRONTEND: noninteractive  # Suppresses apt/dpkg prompts globally
+#       args:
+#         creates: /usr/local/bin/aws    
+#       become: false
+#       register: install_result
+#       failed_when: install_result.rc != 0 
 
-    - name: creating the polocy for aws_alb from iam_polocy.json
-      ansible.builtin.shell: |
-        aws iam create-policy \
-          --policy-name AWSLoadBalancerControllerIAMPolicy \
-          --policy-document file://iam-policy.json
-      environment:
-        HOME: /home/ubuntu
-      become: false
-      register: policy_result
-      failed_when: "'EntityAlreadyExists' not in policy_result.stderr and policy_result.rc != 0"
-    
-    - name: Create an IAM Role for EC2
-      ansible.builtin.shell: |
-        aws iam create-role \
-          --role-name EC2NodeRoleForALB \
-          --assume-role-policy-document '{
-            "Version": "2012-10-17",
-            "Statement": [
-              {
-                "Effect": "Allow",
-                "Principal": { "Service": "ec2.amazonaws.com" },
-                "Action": "sts:AssumeRole"
-              }
-            ]
-          }'
-      environment:
-        HOME: /home/ubuntu
-      become: false
-      register: role_result
-      failed_when: "'EntityAlreadyExists' not in role_result.stderr and role_result.rc != 0"
-    
-    - name: create an instance profile
-      ansible.builtin.shell: |
-        aws iam create-instance-profile --instance-profile-name EC2NodeRoleForALB
-      environment:
-        HOME: /home/ubuntu
-      become: false
-      register: profile_result
-      failed_when: "'EntityAlreadyExists' not in profile_result.stderr and profile_result.rc != 0"
-    
-    - name: attach an instance profile
-      ansible.builtin.shell: |
-        aws iam add-role-to-instance-profile \
-          --instance-profile-name EC2NodeRoleForALB \
-          --role-name EC2NodeRoleForALB
-      environment:
-        HOME: /home/ubuntu
-      become: false
-      register: attach_role_result
-      failed_when: "'LimitExceeded' not in attach_role_result.stderr and attach_role_result.rc != 0"
-    
-    - name: Attach the ALB Policy to the Role
-      ansible.builtin.shell: |
-        aws iam attach-role-policy \
-          --role-name EC2NodeRoleForALB \
-          --policy-arn arn:aws:iam::546771244881:policy/AWSLoadBalancerControllerIAMPolicy
-      environment:
-        HOME: /home/ubuntu
-      become: false
-      register: attach_policy_result
-      failed_when: attach_policy_result.rc != 0
-    
-    - name: Validate AWS credentials
-      ansible.builtin.command: aws sts get-caller-identity
-      environment:
-        AWS_ACCESS_KEY_ID: "{{ aws_access_key | trim }}"
-        AWS_SECRET_ACCESS_KEY: "{{ aws_secret_key | trim }}"
-        AWS_DEFAULT_REGION: ap-south-1
-      register: aws_identity
-      changed_when: false
-      failed_when: "'InvalidClientTokenId' in aws_identity.stderr"
-    
-    - name: Find EC2 worker instance IDs
-      ansible.builtin.command: >
-        aws ec2 describe-instances
-        --region {{ aws_region }}
-        --filters 'Name=tag:Name,Values={{ tag_filter }}'
-        --query 'Reservations[*].Instances[*].InstanceId'
-        --output text
-      environment:
-        HOME: /home/ubuntu
-        AWS_ACCESS_KEY_ID: "{{ aws_access_key | trim }}"
-        AWS_SECRET_ACCESS_KEY: "{{ aws_secret_key | trim }}"
-        AWS_DEFAULT_REGION: "{{ aws_region | trim }}"
-      become: false
-      register: ec2_instances
-      changed_when: false
-    
-    - name: Debug - Show discovered instance IDs
-      ansible.builtin.debug:
-        msg: "Found instances: {{ ec2_instances.stdout_lines }}"
-    
-    - name: Attach IAM Instance Profile to each EC2 instance
-      ansible.builtin.command: >
-        aws ec2 associate-iam-instance-profile
-        --instance-id {{ item }}
-        --iam-instance-profile Name={{ iam_profile_name }}
-        --region {{ aws_region }}
-      environment:
-        HOME: /home/ubuntu
-        AWS_ACCESS_KEY_ID: "{{ aws_access_key | trim }}"
-        AWS_SECRET_ACCESS_KEY: "{{ aws_secret_key | trim }}"
-        AWS_DEFAULT_REGION: "{{ aws_region | trim }}"
-      become: false
-      loop: "{{ ec2_instances.stdout_lines }}"
-      register: attach_results
-      changed_when: attach_results.rc == 0
-      failed_when: "'InvalidInstanceID' in attach_results.stderr or ('ResourceInUseException' not in attach_results.stderr and attach_results.rc != 0)" 
+#     - name: aws credentials configure
+#       ansible.builtin.shell: |
+#           aws configure set aws_access_key_id "{{ aws_access_key }}"
+#           aws configure set aws_secret_access_key "{{ aws_secret_key }}"
+#           aws configure set default.region ap-south-1
+#           aws configure set output json
+#       environment:
+#         HOME: /home/ubuntu
+#       become: false
+#       register: config_result
+#       failed_when: config_result.rc != 0
 
-- name: creating the ALB as well as ingress resource through ingress resource yml
-  hosts: argo_servers
-  become: true
-  gather_facts: yes
+#     - name: creating the polocy for aws_alb from iam_polocy.json
+#       ansible.builtin.shell: |
+#         aws iam create-policy \
+#           --policy-name AWSLoadBalancerControllerIAMPolicy \
+#           --policy-document file://iam-policy.json
+#       environment:
+#         HOME: /home/ubuntu
+#       become: false
+#       register: policy_result
+#       failed_when: "'EntityAlreadyExists' not in policy_result.stderr and policy_result.rc != 0"
+    
+#     - name: Create an IAM Role for EC2
+#       ansible.builtin.shell: |
+#         aws iam create-role \
+#           --role-name EC2NodeRoleForALB \
+#           --assume-role-policy-document '{
+#             "Version": "2012-10-17",
+#             "Statement": [
+#               {
+#                 "Effect": "Allow",
+#                 "Principal": { "Service": "ec2.amazonaws.com" },
+#                 "Action": "sts:AssumeRole"
+#               }
+#             ]
+#           }'
+#       environment:
+#         HOME: /home/ubuntu
+#       become: false
+#       register: role_result
+#       failed_when: "'EntityAlreadyExists' not in role_result.stderr and role_result.rc != 0"
+    
+#     - name: create an instance profile
+#       ansible.builtin.shell: |
+#         aws iam create-instance-profile --instance-profile-name EC2NodeRoleForALB
+#       environment:
+#         HOME: /home/ubuntu
+#       become: false
+#       register: profile_result
+#       failed_when: "'EntityAlreadyExists' not in profile_result.stderr and profile_result.rc != 0"
+    
+#     - name: attach an instance profile
+#       ansible.builtin.shell: |
+#         aws iam add-role-to-instance-profile \
+#           --instance-profile-name EC2NodeRoleForALB \
+#           --role-name EC2NodeRoleForALB
+#       environment:
+#         HOME: /home/ubuntu
+#       become: false
+#       register: attach_role_result
+#       failed_when: "'LimitExceeded' not in attach_role_result.stderr and attach_role_result.rc != 0"
+     
+#     - name: Attach the ALB Policy to the Role
+#       ansible.builtin.shell: |
+#         aws iam attach-role-policy \
+#           --role-name EC2NodeRoleForALB \
+#           --policy-arn arn:aws:iam::546771244881:policy/AWSLoadBalancerControllerIAMPolicy
+#       environment:
+#         HOME: /home/ubuntu
+#       become: false
+#       register: attach_policy_result
+#       failed_when: attach_policy_result.rc != 0
+    
+#     - name: Validate AWS credentials
+#       ansible.builtin.command: aws sts get-caller-identity
+#       environment:
+#         AWS_ACCESS_KEY_ID: "{{ aws_access_key | trim }}"
+#         AWS_SECRET_ACCESS_KEY: "{{ aws_secret_key | trim }}"
+#         AWS_DEFAULT_REGION: ap-south-1
+#       register: aws_identity
+#       changed_when: false
+#       failed_when: "'InvalidClientTokenId' in aws_identity.stderr"
+    
+#     - name: Find EC2 worker instance IDs
+#       ansible.builtin.command: >
+#         aws ec2 describe-instances
+#         --region {{ aws_region }}
+#         --filters 'Name=tag:Name,Values={{ tag_filter }}'
+#         --query 'Reservations[*].Instances[*].InstanceId'
+#         --output text
+#       environment:
+#         HOME: /home/ubuntu
+#         AWS_ACCESS_KEY_ID: "{{ aws_access_key | trim }}"
+#         AWS_SECRET_ACCESS_KEY: "{{ aws_secret_key | trim }}"
+#         AWS_DEFAULT_REGION: "{{ aws_region | trim }}"
+#       become: false
+#       register: ec2_instances
+#       changed_when: false
+    
+#     - name: Debug - Show discovered instance IDs
+#       ansible.builtin.debug:
+#         msg: "Found instances: {{ ec2_instances.stdout_lines }}"
+    
+#     - name: Attach IAM Instance Profile to each EC2 instance
+#       ansible.builtin.command: >
+#         aws ec2 associate-iam-instance-profile
+#         --instance-id {{ item }}
+#         --iam-instance-profile Name={{ iam_profile_name }}
+#         --region {{ aws_region }}
+#       environment:
+#         HOME: /home/ubuntu
+#         AWS_ACCESS_KEY_ID: "{{ aws_access_key | trim }}"
+#         AWS_SECRET_ACCESS_KEY: "{{ aws_secret_key | trim }}"
+#         AWS_DEFAULT_REGION: "{{ aws_region | trim }}"
+#       become: false
+#       loop: "{{ ec2_instances.stdout_lines }}"
+#       register: attach_results
+#       changed_when: attach_results.rc == 0
+#       failed_when: "'InvalidInstanceID' in attach_results.stderr or ('ResourceInUseException' not in attach_results.stderr and attach_results.rc != 0)" 
 
-  vars:
-    aws_access_key: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') | default('') }}"
-    aws_secret_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') | default('') }}"
+# - name: creating the ALB as well as ingress resource through ingress resource yml
+#   hosts: argo_servers
+#   become: true
+#   gather_facts: yes
 
-  tasks:
+#   vars:
+#     aws_access_key: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') | default('') }}"
+#     aws_secret_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') | default('') }}"
+
+#   tasks:
   
-    - name: creating the ALB as well as ingress resource
-      ansible.builtin.include_role:
-        name: alb
-      register: alb_result
+#     - name: creating the ALB as well as ingress resource
+#       ansible.builtin.include_role:
+#         name: alb
+#       register: alb_result
