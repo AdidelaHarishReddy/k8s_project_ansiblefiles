@@ -23,21 +23,37 @@
       become: false
 
     - name: copying the ingress.yaml resource file to the remote server
-      ansible.builtin.copy: |
-         src: ingress.yaml           # file inside the role's "files" folder
-         dest: /tmp/ingress.yaml     # destination path on the target host
-         owner: ubuntu                 # optional
-         group: ubuntu               # optional
-         mode: '0777'                # optional, file permissions
-      environment:
-          HOME: /home/ubuntu
-
-    - name: running the ingress resource in project namespace for project application
+      ansible.builtin.copy:
+        src: ingress.yaml
+        dest: /tmp/ingress.yaml
+        owner: ubuntu
+        group: ubuntu
+        mode: '0777'
+    
+    - name: apply ingress resource
       ansible.builtin.shell: |
-        kubectl apply -f ingress.yaml -n project
+        kubectl apply -f /tmp/ingress.yaml -n project
       environment:
-          KUBECONFIG: /home/ubuntu/.kube/config
-      become: false
-      register: app_create_result
-      failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"
+        KUBECONFIG: /home/ubuntu/.kube/config
+      register: ingress_result
+      failed_when: ingress_result.rc != 0
+
+    # - name: copying the ingress.yaml resource file to the remote server
+    #   ansible.builtin.copy: |
+    #      src: ingress.yaml           # file inside the role's "files" folder
+    #      dest: /tmp/ingress.yaml     # destination path on the target host
+    #      owner: ubuntu                 # optional
+    #      group: ubuntu               # optional
+    #      mode: '0777'                # optional, file permissions
+    #   environment:
+    #       HOME: /home/ubuntu
+
+    # - name: running the ingress resource in project namespace for project application
+    #   ansible.builtin.shell: |
+    #     kubectl apply -f ingress.yaml -n project
+    #   environment:
+    #       KUBECONFIG: /home/ubuntu/.kube/config
+    #   become: false
+    #   register: app_create_result
+    #   failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"
 
