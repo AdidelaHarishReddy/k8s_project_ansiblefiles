@@ -10,18 +10,17 @@
       register: app_create_result
       failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0" 
 
-    - name: installing the aws-load-balancer-controller
+    - name: installing or upgrading the aws-load-balancer-controller
       ansible.builtin.shell: | 
-        helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+        helm upgrade aws-load-balancer-controller eks/aws-load-balancer-controller \
         -n kube-system \
         --set clusterName=my_cluster \
-        --set region=ap-south-1 \
-        --set vpcId=vpc-0700db45c2075c072
+        --set region=ap-south-1
       environment:
           KUBECONFIG: /home/ubuntu/.kube/config
+      register: app_create_result
+      failed_when: "'cannot re-use a name that is still in use' not in app_create_result.stderr and app_create_result.rc != 0" 
       become: false
-          register: app_create_result
-      failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0" 
 
     - name: copying the ingress.yaml resource file to the remote server
       ansible.builtin.copy: |
