@@ -32,6 +32,7 @@
     
     - name: apply ingress resource
       ansible.builtin.shell: |
+        sleep 30
         kubectl apply -f /tmp/ingress.yaml -n project
       environment:
         KUBECONFIG: /home/ubuntu/.kube/config
