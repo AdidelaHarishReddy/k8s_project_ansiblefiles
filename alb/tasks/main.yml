@@ -12,7 +12,7 @@
 
     - name: installing or upgrading the aws-load-balancer-controller
       ansible.builtin.shell: | 
-        helm upgrade aws-load-balancer-controller eks/aws-load-balancer-controller \
+        helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
         -n kube-system \
         --set clusterName=my_cluster \
         --set region=ap-south-1
