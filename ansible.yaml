@@ -46,11 +46,6 @@
         msg: "NodePort: {{ nodeport.stdout }}"
       ignore_errors: yes
 
-    - name: Debug nodeport
-      ansible.builtin.debug:
-        var: nodePort
-      ignore_errors: yes
-
     - name: getting argocd password
       ansible.builtin.shell: |
         kubectl get secrets -n argocd argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d | xargs -I{} echo "{}"
@@ -221,6 +216,11 @@
       register: download_result
       failed_when: download_result.rc != 0
 
+    - name: debugging the aws_loadbalancer_json_polocy
+      ansible.builtin.debug:
+        msg: "attaching profiledata: {{ download_result }}"
+      ignore_errors: yes    
+
     - name: installing aws cli
       ansible.builtin.shell: |
         curl -s https://raw.githubusercontent.com/AdidelaHarishReddy/installations/refs/heads/main/install_aws_cli | bash
@@ -232,6 +232,11 @@
       become: false
       register: install_result
       failed_when: install_result.rc != 0 
+
+    - name: debugging the installing aws cli
+      ansible.builtin.debug:
+        msg: "attaching profiledata: {{ install_result }}"
+      ignore_errors: yes    
 
     - name: aws credentials configure
       ansible.builtin.shell: |
@@ -245,6 +250,11 @@
       register: config_result
       failed_when: config_result.rc != 0
 
+    - name: debugging the aws credentials configure
+      ansible.builtin.debug:
+        msg: "attaching profiledata: {{ config_result }}"
+      ignore_errors: yes    
+
     - name: creating the polocy for aws_alb from iam_polocy.json
       ansible.builtin.shell: |
         aws iam create-policy \
@@ -255,6 +265,11 @@
       become: false
       register: policy_result
       failed_when: "'EntityAlreadyExists' not in policy_result.stderr and policy_result.rc != 0"
+
+    - name: debugging the polocy for aws_alb from iam_polocy.json
+      ansible.builtin.debug:
+        msg: "attaching profiledata: {{ policy_result }}"
+      ignore_errors: yes    
     
     - name: Create an IAM Role for EC2
       ansible.builtin.shell: |
@@ -276,6 +291,11 @@
       register: role_result
       failed_when: "'EntityAlreadyExists' not in role_result.stderr and role_result.rc != 0"
     
+    - name: debugging the IAM Role for EC2
+      ansible.builtin.debug:
+        msg: "attaching profiledata: {{ role_result }}"
+      ignore_errors: yes
+
     - name: create an instance profile
       ansible.builtin.shell: |
         aws iam create-instance-profile --instance-profile-name EC2NodeRoleForALB
@@ -285,7 +305,12 @@
       register: profile_result
       failed_when: "'EntityAlreadyExists' not in profile_result.stderr and profile_result.rc != 0"
     
-    - name: attach an instance profile
+    - name: debugging the instance profile
+      ansible.builtin.debug:
+        msg: "Inastance profile: {{ profile_result }}"
+      ignore_errors: yes
+
+    - name: attaching role to instance profile
       ansible.builtin.shell: |
         aws iam add-role-to-instance-profile \
           --instance-profile-name EC2NodeRoleForALB \
@@ -293,8 +318,13 @@
       environment:
         HOME: /home/ubuntu
       become: false
-      register: attach_role_result
+      register: attach_role
       failed_when: "'LimitExceeded' not in attach_role_result.stderr and attach_role_result.rc != 0"
+
+    - name: debugging the ataching role to instance profile
+      ansible.builtin.debug:
+        msg: "Attaching role to instance profile: {{ attach_role }}"
+      ignore_errors: yes    
      
     - name: Attach the ALB Policy to the Role
       ansible.builtin.shell: |
@@ -306,6 +336,11 @@
       become: false
       register: attach_policy_result
       failed_when: attach_policy_result.rc != 0
+
+    - name: debugging the Attach the ALB Policy to the Role
+      ansible.builtin.debug:
+        msg: "Attach the ALB Policy to the Role: {{ attach_policy_result }}"
+      ignore_errors: yes    
     
     - name: Find EC2 worker instance IDs and Attach IAM Instance Profile to each EC2 instance
       ansible.builtin.shell: >
@@ -320,11 +355,16 @@
       register: attach_profile
       failed_when: attach_profile.rc != 0
       changed_when: false
-  
+
+    - name: debugging the attaching the profile to ec2 instances
+      ansible.builtin.debug:
+        msg: "attaching profiledata: {{ attach_profile }}"    
+      ignore_errors: yes
+
     - name: creating the ALB as well as ingress resource
       ansible.builtin.include_role:
         name: alb
-      register: alb_result
+      register: alb_result    
 
 
 
