@@ -216,10 +216,10 @@
       register: download_result
       failed_when: download_result.rc != 0
 
-    - name: debugging the aws_loadbalancer_json_polocy
-      ansible.builtin.debug:
-        msg: "attaching profiledata: {{ download_result }}"
-      ignore_errors: yes    
+    # - name: debugging the aws_loadbalancer_json_polocy
+    #   ansible.builtin.debug:
+    #     msg: "attaching profiledata: {{ download_result }}"
+    #   ignore_errors: yes    
 
     - name: installing aws cli
       ansible.builtin.shell: |
@@ -233,10 +233,10 @@
       register: install_result
       failed_when: install_result.rc != 0 
 
-    - name: debugging the installing aws cli
-      ansible.builtin.debug:
-        msg: "attaching profiledata: {{ install_result }}"
-      ignore_errors: yes    
+    # - name: debugging the installing aws cli
+    #   ansible.builtin.debug:
+    #     msg: "attaching profiledata: {{ install_result }}"
+    #   ignore_errors: yes    
 
     - name: aws credentials configure
       ansible.builtin.shell: |
@@ -319,7 +319,11 @@
         HOME: /home/ubuntu
       become: false
       register: attach_role
-      failed_when: "'LimitExceeded' not in attach_role_result.stderr and attach_role_result.rc != 0"
+      failed_when:
+        - attach_role.rc != 0
+        - "'EntityAlreadyExists' not in attach_role.stderr"
+        - "'LimitExceeded' not in attach_role.stderr"
+      changed_when: "'EntityAlreadyExists' not in attach_role.stderr"
 
     - name: debugging the ataching role to instance profile
       ansible.builtin.debug:
