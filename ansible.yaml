@@ -66,7 +66,7 @@
       wait_for:
         host: "{{ hostname_master.stdout | trim }}"
         port: "{{ nodePort | int }}"
-        timeout: 60
+        timeout: 120
 
     - name: Login to ArgoCD
       ansible.builtin.shell: |
@@ -344,27 +344,68 @@
     - name: debugging the Attach the ALB Policy to the Role
       ansible.builtin.debug:
         msg: "Attach the ALB Policy to the Role: {{ attach_policy_result }}"
-      ignore_errors: yes    
-    
-    - name: Find EC2 worker instance IDs and Attach IAM Instance Profile to each EC2 instance
-      ansible.builtin.shell: >
-        aws ec2 describe-instances --region ap-south-1
-        --filters "Name=tag:Name,Values=*worker*"
-        --query "Reservations[].Instances[].InstanceId"
-        --output text |
-        awk -F ' ' '{print $1}{print $2}' |
-        xargs -I {} aws ec2 associate-iam-instance-profile
-        --instance-id {} --iam-instance-profile Name=EC2NodeRoleForALB
-        --region ap-south-1
-      register: attach_profile
-      failed_when: attach_profile.rc != 0
-      changed_when: false
-
-    - name: debugging the attaching the profile to ec2 instances
-      ansible.builtin.debug:
-        msg: "attaching profiledata: {{ attach_profile }}"    
       ignore_errors: yes
 
+    - name: Attach AmazonEBSCSIDriverPolicy to node role
+      ansible.builtin.shell: |
+        aws iam attach-role-policy \
+          --role-name EC2NodeRoleForALB \
+          --policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy
+      environment:
+        HOME: /home/ubuntu
+      become: false
+      register: ebs_policy_attach
+      failed_when: ebs_policy_attach.rc != 0
+
+    - name: debugging the Attach the ALB Policy to the Role
+      ansible.builtin.debug:
+        msg: "Attach the ALB Policy to the Role: {{ ebs_policy_attach }}"
+      ignore_errors: yes
+    
+#    - name: Find EC2 worker instance IDs and Attach IAM Instance Profile to each EC2 instance
+#      ansible.builtin.shell: >
+#        aws ec2 describe-instances --region ap-south-1
+#        --filters "Name=tag:Name,Values=*worker*"
+#        --query "Reservations[].Instances[].InstanceId"
+#        --output text |
+#        awk -F ' ' '{print $1}{print $2}' |
+#        xargs -I {} aws ec2 associate-iam-instance-profile
+#        --instance-id {} --iam-instance-profile Name=EC2NodeRoleForALB
+#        --region ap-south-1
+#      register: attach_profile
+#      failed_when: attach_profile.rc != 0
+#      changed_when: false
+
+#    - name: debugging the attaching the profile to ec2 instances
+#      ansible.builtin.debug:
+#        msg: "attaching profiledata: {{ attach_profile }}"    
+#      ignore_errors: yes
+
+    - name: Get worker EC2 instance IDs
+      amazon.aws.ec2_instance_info:
+        region: ap-south-1
+        filters:
+          "tag:Name": "*worker*"
+          instance-state-name: running
+      become: false   #for boto3 modules we need to remove root previlages because it will check for aws credentials at root/.aws/credentials but its avilable at home/ubuntu/.aws/credentials   
+      register: worker_instances
+
+    - name: Set worker instance IDs
+      ansible.builtin.set_fact:
+        worker_instance_ids: >-
+          {{ worker_instances.instances | map(attribute='instance_id') | list }}
+
+    - name: Debug worker instance IDs
+      ansible.builtin.debug:
+        var: worker_instance_ids
+
+    - name: Attach IAM role to EC2 instances
+      amazon.aws.ec2_instance:
+        instance_ids: "{{ worker_instance_ids }}"
+        iam_instance_profile: EC2NodeRoleForALB
+        region: ap-south-1
+      become: false    
+      
     - name: creating the ALB as well as ingress resource
       ansible.builtin.include_role:
         name: alb
