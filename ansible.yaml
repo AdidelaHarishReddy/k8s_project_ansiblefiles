@@ -17,6 +17,7 @@
     kube_dest_server: "https://kubernetes.default.svc"
     aws_access_key: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') | default('') }}"
     aws_secret_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') | default('') }}"
+    aws_ac_no: "485098663225"  
 
   tasks:
 
@@ -334,7 +335,7 @@
       ansible.builtin.shell: |
         aws iam attach-role-policy \
           --role-name EC2NodeRoleForALB \
-          --policy-arn arn:aws:iam::546771244881:policy/AWSLoadBalancerControllerIAMPolicy
+          --policy-arn arn:aws:iam::{{ aws_ac_no }}:policy/AWSLoadBalancerControllerIAMPolicy
       environment:
         HOME: /home/ubuntu
       become: false
