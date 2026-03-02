@@ -133,79 +133,79 @@
          KUBECONFIG: /home/ubuntu/.kube/config
       delay: 5     
        
-    - name: adding promethius repo
-      ansible.builtin.shell: |
-          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-          helm repo update
-      environment:
-        KUBECONFIG: /home/ubuntu/.kube/config
-        HOME: /home/ubuntu
-      become: false
-           # failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"
+    # - name: adding promethius repo
+    #   ansible.builtin.shell: |
+    #       helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+    #       helm repo update
+    #   environment:
+    #     KUBECONFIG: /home/ubuntu/.kube/config
+    #     HOME: /home/ubuntu
+    #   become: false
+    #        # failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"
 
-    - name: creating the new namespace for monitoring
-      ansible.builtin.shell: |
-          kubectl create ns monitoring
-      environment:
-         KUBECONFIG: /home/ubuntu/.kube/config
-      failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"      
+    # - name: creating the new namespace for monitoring
+    #   ansible.builtin.shell: |
+    #       kubectl create ns monitoring
+    #   environment:
+    #      KUBECONFIG: /home/ubuntu/.kube/config
+    #   failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"      
 
-    - name: Create custom values file for kube-prometheus-stack
-      become: false
-      ansible.builtin.copy:
-        dest: ./custom_kube_prometheus_stack.yml
-        content: |
-          alertmanager:
-            enabled: true
-            alertmanagerSpec:
-              # Selects Alertmanager configuration based on these labels.
-              alertmanagerConfigSelector:
-                matchLabels:
-                  release: monitoring
-              replicas: 2
-              alertmanagerConfigMatcherStrategy:
-                type: None
+    # - name: Create custom values file for kube-prometheus-stack
+    #   become: false
+    #   ansible.builtin.copy:
+    #     dest: ./custom_kube_prometheus_stack.yml
+    #     content: |
+    #       alertmanager:
+    #         enabled: true
+    #         alertmanagerSpec:
+    #           # Selects Alertmanager configuration based on these labels.
+    #           alertmanagerConfigSelector:
+    #             matchLabels:
+    #               release: monitoring
+    #           replicas: 2
+    #           alertmanagerConfigMatcherStrategy:
+    #             type: None
                   
-    - name: installing prometheus-communinty charts
-      ansible.builtin.shell: |         
-        helm install monitoring prometheus-community/kube-prometheus-stack -n monitoring -f ./custom_kube_prometheus_stack.yml
-        sleep 10
-      environment:
-        KUBECONFIG: /home/ubuntu/.kube/config
-      become: false     
-      failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"     
+    # - name: installing prometheus-communinty charts
+    #   ansible.builtin.shell: |         
+    #     helm install monitoring prometheus-community/kube-prometheus-stack -n monitoring -f ./custom_kube_prometheus_stack.yml
+    #     sleep 10
+    #   environment:
+    #     KUBECONFIG: /home/ubuntu/.kube/config
+    #   become: false     
+    #   failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"     
           
-    - name: installing INGRESS NGINX CONTROLLER charts
-      ansible.builtin.shell: |
-          helm install my-release oci://ghcr.io/nginx/charts/nginx-ingress \
-            --version 2.3.1 \
-            --namespace ingress-nginx \
-            --create-namespace \
-            --set controller.kind=daemonset \
-            --set controller.service.type=NodePort \
-            --set controller.hostPort.enabled=true
-          sleep 2
-      environment:
-          KUBECONFIG: /home/ubuntu/.kube/config
-      become: false
-      failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"      
+    # - name: installing INGRESS NGINX CONTROLLER charts
+    #   ansible.builtin.shell: |
+    #       helm install my-release oci://ghcr.io/nginx/charts/nginx-ingress \
+    #         --version 2.3.1 \
+    #         --namespace ingress-nginx \
+    #         --create-namespace \
+    #         --set controller.kind=daemonset \
+    #         --set controller.service.type=NodePort \
+    #         --set controller.hostPort.enabled=true
+    #       sleep 2
+    #   environment:
+    #       KUBECONFIG: /home/ubuntu/.kube/config
+    #   become: false
+    #   failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"      
 
-    - name: Copy ingress file from local to remote
-      become: false
-      ansible.builtin.copy:
-        src: "{{ playbook_dir }}/monitoring_ingress.yaml"         # Relative to playbook directory on controller
-        dest: /home/ubuntu/
-        owner: ubuntu
-        group: ubuntu
-        mode: '0777'
+    # - name: Copy ingress file from local to remote
+    #   become: false
+    #   ansible.builtin.copy:
+    #     src: "{{ playbook_dir }}/monitoring_ingress.yaml"         # Relative to playbook directory on controller
+    #     dest: /home/ubuntu/
+    #     owner: ubuntu
+    #     group: ubuntu
+    #     mode: '0777'
 
-    - name: applying INGRESS RESOURCE file for monitoring namespace
-      ansible.builtin.shell: | 
-        kubectl apply -f monitoring_ingress.yaml -n monitoring
-      environment:
-          KUBECONFIG: /home/ubuntu/.kube/config
-      become: false
-      failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"  
+    # - name: applying INGRESS RESOURCE file for monitoring namespace
+    #   ansible.builtin.shell: | 
+    #     kubectl apply -f monitoring_ingress.yaml -n monitoring
+    #   environment:
+    #       KUBECONFIG: /home/ubuntu/.kube/config
+    #   become: false
+    #   failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"  
 
 #     installing the iam polocies and roles for create aplication load balancer
     - name: downloding the aws_loadbalancer_json_polocy
@@ -217,10 +217,10 @@
       register: download_result
       failed_when: download_result.rc != 0
 
-    # - name: debugging the aws_loadbalancer_json_polocy
-    #   ansible.builtin.debug:
-    #     msg: "attaching profiledata: {{ download_result }}"
-    #   ignore_errors: yes    
+    - name: debugging the aws_loadbalancer_json_polocy
+      ansible.builtin.debug:
+        msg: "attaching profiledata: {{ download_result }}"
+      ignore_errors: yes    
 
     - name: installing aws cli
       ansible.builtin.shell: |
@@ -406,6 +406,22 @@
         iam_instance_profile: EC2NodeRoleForALB
         region: ap-south-1
       become: false    
+
+    - name: installing ingress controller through helm
+      ansible.builtin.shell: |
+          helm install my-release oci://ghcr.io/nginx/charts/nginx-ingress \
+            --version 2.3.1 \
+            --namespace ingress-nginx \
+            --create-namespace \
+            --set controller.kind=daemonset \
+            --set controller.service.type=NodePort \
+            --set controller.hostPort.enabled=true
+          sleep 5
+      environment:
+          KUBECONFIG: /home/ubuntu/.kube/config
+      become: false
+      register: ingress_result
+      failed_when: "'already exists' not in ingress_result.stderr and ingress_result.rc != 0" 
       
     - name: creating the ALB as well as ingress resource
       ansible.builtin.include_role:
