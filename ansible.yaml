@@ -105,13 +105,13 @@
       register: app_create_result
       failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"
 
-    - name: Sync ArgoCD Application (optional)
-      ansible.builtin.shell: |
-        argocd app sync {{ app_name }} --force
-      register: sync_result
-      until: sync_result.rc == 0
-      retries: 5
-      delay: 10
+    #- name: Sync ArgoCD Application (optional)
+    # ansible.builtin.shell: |
+    #   argocd app sync {{ app_name }} --force
+    # register: sync_result
+    # until: sync_result.rc == 0
+    # retries: 5
+    # delay: 10
 
     - name: creating aws key_id& access_key
       ansible.builtin.shell: |
@@ -133,7 +133,21 @@
       environment:
          KUBECONFIG: /home/ubuntu/.kube/config
       delay: 5     
-       
+    
+    - name: creating k8s dashboard with nodeport service type
+      ansible.builtin.include_role:
+        name: k8sdashboard
+      register: k8sdashboard_result
+    
+    - name: Sync ArgoCD Application (optional)
+      ansible.builtin.shell: |
+        argocd app sync {{ app_name }} --force
+      register: sync_result
+      until: sync_result.rc == 0
+      retries: 5
+      delay: 10
+    
+   
     # - name: adding promethius repo
     #   ansible.builtin.shell: |
     #       helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
@@ -208,7 +222,7 @@
     #   become: false
     #   failed_when: "'already exists' not in app_create_result.stderr and app_create_result.rc != 0"  
 
-#     installing the iam polocies and roles for create aplication load balancer
+    #installing the iam polocies and roles for create aplication load balancer
     - name: downloding the aws_loadbalancer_json_polocy
       ansible.builtin.shell: |
          curl -o iam-policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
@@ -427,7 +441,12 @@
     - name: creating the ALB as well as ingress resource
       ansible.builtin.include_role:
         name: alb
-      register: alb_result    
+      register: alb_result
+    - name: creating k8s db migrations throuth backend pod
+      ansible.builtin.include_role:
+        name: db_migrations
+      register: k8sdashboard_result
+    
 
 
 

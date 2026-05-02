@@ -1,0 +1,21 @@
+#SPDX-License-Identifier: MIT-0
+---
+# tasks file for db_migrations
+- name: Run Django migration in one backend pod
+  ansible.builtin.shell: |
+    kubectl exec -n project \
+    $(kubectl get pod -l app=backend -n project -o jsonpath='{.items[0].metadata.name}') \
+    -c backend -- sh -c "
+      python manage.py migrate &&
+      python manage.py showmigrations core
+    "
+  register: migrations
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+  changed_when: false
+
+- name: Debug migration output
+  ansible.builtin.debug:
+    msg: "{{ migrations.stdout }}"
+  ignore_errors: true
+   

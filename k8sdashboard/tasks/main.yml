@@ -1,0 +1,46 @@
+---
+# tasks file for k8sdashboard
+
+- name: Ensure kubernetes-dashboard namespace exists
+  ansible.builtin.shell: |
+    kubectl get namespace kubernetes-dashboard || kubectl create namespace kubernetes-dashboard
+  register: ns_out
+  changed_when: "'created' in ns_out.stdout"
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config  
+
+- name: Add Kubernetes Dashboard Helm repository
+  ansible.builtin.shell: |
+    helm repo add kubernetes-dashboard https://kubernetes-retired.github.io/dashboard/ || true 
+    helm repo update
+  register: repo_out
+  changed_when: false
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+
+- name: Install or upgrade Kubernetes Dashboard
+  ansible.builtin.shell: |
+    helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard \
+      --namespace kubernetes-dashboard --set service.type=NodePort
+    sleep 10
+    kubectl patch svc kubernetes-dashboard-kong-proxy -n kubernetes-dashboard -p '{"spec": {"type": "NodePort"}}'  
+  register: helm_out
+  changed_when: "'installed' in helm_out.stdout or 'upgraded' in helm_out.stdout"
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+
+
+- name: Kubernetes Dashboard token
+  ansible.builtin.shell: |
+    kubectl create token admin-user -n kubernetes-dashboard
+  register: kubernetes_token
+  changed_when: false
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+
+- name: Kubernetes Dashboard token
+  ansible.builtin.debug: |
+    msg: kubernetes_token: {kubernetes_token.stdout}
+  ignoreerrors: true
+    
+     
